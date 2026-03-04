@@ -10,8 +10,9 @@ authors = [
 ]
 
 dependencies = [
+    "cosalette>=0.1.7",
     "pydantic>=2.12.5",
-    "pydantic-settings>=2.12.0"
+    "pydantic-settings>=2.12.0",
 ]
 
 [build-system]
@@ -136,6 +137,10 @@ disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
 module = "jeelink2mqtt._version"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["cosalette", "cosalette.*", "pylacrosse", "pylacrosse.*"]
 ignore_missing_imports = true
 
 [tool.pyright]
