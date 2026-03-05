@@ -11,7 +11,6 @@ Test Techniques Used:
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -33,26 +32,7 @@ from jeelink2mqtt.receiver import (
 )
 from jeelink2mqtt.registry import SensorRegistry
 from jeelink2mqtt.settings import Jeelink2MqttSettings, SensorConfigSettings
-
-# ---------------------------------------------------------------------------
-# Test doubles
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class FakeDeviceContext:
-    """Minimal mock for cosalette.DeviceContext publish interface."""
-
-    published: list[tuple[str, str, bool]] = field(default_factory=list)
-    _shutdown: bool = False
-
-    async def publish(self, topic: str, payload: str, *, retain: bool = False) -> None:
-        self.published.append((topic, payload, retain))
-
-    @property
-    def shutdown_requested(self) -> bool:
-        return self._shutdown
-
+from tests.fixtures.doubles import FakeDeviceContext
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -462,12 +442,11 @@ class TestPublishMappingState:
 
         Technique: Specification-based — snapshot reflects registry state.
         """
-        # Arrange
-        configs = [SensorConfig(name="office"), SensorConfig(name="outdoor")]
+        # Arrange — use explicit assign for a deterministic mapping
+        configs = [SensorConfig(name="office")]
         state = _make_shared_state(sensor_configs=configs)
-        # Simulate a mapping by recording a reading for 'office'
-        reading = _fixed_reading(sensor_id=42)
-        state.registry.record_reading(reading)
+        state.registry.assign("office", 42)
+        state.registry.drain_events()
 
         ctx = FakeDeviceContext()
 
@@ -481,8 +460,8 @@ class TestPublishMappingState:
         assert retain is True
 
         data = json.loads(payload)
-        # At least the auto-adopted mapping should be present
-        assert isinstance(data, dict)
+        assert "office" in data
+        assert data["office"]["sensor_id"] == 42
 
     async def test_empty_registry_publishes_empty_object(self) -> None:
         """When no mappings exist, publishes an empty JSON object.

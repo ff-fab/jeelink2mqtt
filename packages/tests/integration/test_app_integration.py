@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 import cosalette
@@ -43,29 +42,8 @@ from jeelink2mqtt.models import SensorConfig, SensorReading
 from jeelink2mqtt.receiver import register_receiver
 from jeelink2mqtt.registry import SensorRegistry
 from jeelink2mqtt.settings import Jeelink2MqttSettings, SensorConfigSettings
-
-# ======================================================================
-# Test doubles
-# ======================================================================
-
-
-@dataclass
-class FakeDeviceContext:
-    """Minimal mock for cosalette.DeviceContext used by the receiver.
-
-    Captures publish calls and exposes a controllable shutdown flag.
-    """
-
-    published: list[tuple[str, str, bool]] = field(default_factory=list)
-    _shutdown: bool = False
-
-    async def publish(self, topic: str, payload: str, *, retain: bool = False) -> None:
-        self.published.append((topic, payload, retain))
-
-    @property
-    def shutdown_requested(self) -> bool:
-        return self._shutdown
-
+from tests.fixtures.async_utils import wait_for_condition
+from tests.fixtures.doubles import FakeDeviceContext
 
 # ======================================================================
 # Helpers
@@ -639,12 +617,17 @@ class TestReceiverMainLoop:
         task = asyncio.create_task(
             receiver_fn(ctx, adapter, store, settings_one_sensor)
         )
-        # Let the receiver set up (open, register_callback, start_scan)
-        await asyncio.sleep(0.05)
+        await wait_for_condition(
+            lambda: adapter._callback is not None,
+            description="adapter callback registered",
+        )
 
         # Inject a reading through the adapter's callback bridge
         adapter.inject(reading)
-        await asyncio.sleep(0.05)
+        await wait_for_condition(
+            lambda: any(t == "raw/state" for t, _, _ in ctx.published),
+            description="raw/state published",
+        )
 
         # Signal shutdown and wait for clean exit
         ctx._shutdown = True
@@ -685,12 +668,18 @@ class TestReceiverMainLoop:
         task = asyncio.create_task(
             receiver_fn(ctx, adapter, store, settings_one_sensor)
         )
-        await asyncio.sleep(0.05)
+        await wait_for_condition(
+            lambda: adapter._callback is not None,
+            description="adapter callback registered",
+        )
 
         # Inject 3 readings (window=3 for filter convergence)
         for _ in range(3):
             adapter.inject(reading)
-            await asyncio.sleep(0.05)
+        await wait_for_condition(
+            lambda: any(t == "office/state" for t, _, _ in ctx.published),
+            description="sensor state published",
+        )
 
         ctx._shutdown = True
         await asyncio.wait_for(task, timeout=3.0)
@@ -734,10 +723,16 @@ class TestReceiverMainLoop:
         task = asyncio.create_task(
             receiver_fn(ctx, adapter, store, settings_one_sensor)
         )
-        await asyncio.sleep(0.05)
+        await wait_for_condition(
+            lambda: adapter._callback is not None,
+            description="adapter callback registered",
+        )
 
         adapter.inject(reading)
-        await asyncio.sleep(0.1)
+        await wait_for_condition(
+            lambda: any(t == "mapping/event" for t, _, _ in ctx.published),
+            description="mapping event published",
+        )
 
         ctx._shutdown = True
         await asyncio.wait_for(task, timeout=3.0)
@@ -784,10 +779,16 @@ class TestReceiverMainLoop:
         task = asyncio.create_task(
             receiver_fn(ctx, adapter, store, settings_one_sensor)
         )
-        await asyncio.sleep(0.05)
+        await wait_for_condition(
+            lambda: adapter._callback is not None,
+            description="adapter callback registered",
+        )
 
         adapter.inject(reading)
-        await asyncio.sleep(0.1)
+        await wait_for_condition(
+            lambda: "registry" in store,
+            description="registry persisted",
+        )
 
         ctx._shutdown = True
         await asyncio.wait_for(task, timeout=3.0)
@@ -821,12 +822,21 @@ class TestReceiverMainLoop:
         task = asyncio.create_task(
             receiver_fn(ctx, adapter, store, settings_one_sensor)
         )
-        await asyncio.sleep(0.05)
+        await wait_for_condition(
+            lambda: adapter._callback is not None,
+            description="adapter callback registered",
+        )
 
         # Fill filter window
         for _ in range(3):
             adapter.inject(reading)
-            await asyncio.sleep(0.05)
+        await wait_for_condition(
+            lambda: any(
+                t == "office/availability" and p == "online"
+                for t, p, _ in ctx.published
+            ),
+            description="online availability published",
+        )
 
         ctx._shutdown = True
         await asyncio.wait_for(task, timeout=3.0)
@@ -860,7 +870,10 @@ class TestReceiverMainLoop:
         task = asyncio.create_task(
             receiver_fn(ctx, adapter, store, settings_one_sensor)
         )
-        await asyncio.sleep(0.05)
+        await wait_for_condition(
+            lambda: adapter._callback is not None,
+            description="adapter callback registered",
+        )
 
         ctx._shutdown = True
         await asyncio.wait_for(task, timeout=3.0)
@@ -898,7 +911,10 @@ class TestReceiverMainLoop:
         task = asyncio.create_task(
             receiver_fn(ctx, adapter, store, settings_one_sensor)
         )
-        await asyncio.sleep(0.05)
+        await wait_for_condition(
+            lambda: adapter._callback is not None,
+            description="adapter callback registered",
+        )
 
         # Inject a reading with the persisted sensor_id
         reading = SensorReading(
@@ -910,7 +926,10 @@ class TestReceiverMainLoop:
         )
         for _ in range(3):
             adapter.inject(reading)
-            await asyncio.sleep(0.05)
+        await wait_for_condition(
+            lambda: any(t == "office/state" for t, _, _ in ctx.published),
+            description="sensor state published",
+        )
 
         ctx._shutdown = True
         await asyncio.wait_for(task, timeout=3.0)

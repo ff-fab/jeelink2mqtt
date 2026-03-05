@@ -110,9 +110,8 @@ class TestVersionResolution:
             ):
                 importlib.reload(jeelink2mqtt)
 
-            # Assert — should have gotten a version string (from metadata)
-            assert isinstance(jeelink2mqtt.__version__, str)
-            assert len(jeelink2mqtt.__version__) > 0
+            # Assert — __version__ comes from patched metadata.version
+            assert jeelink2mqtt.__version__ == "1.2.3.test"
         finally:
             # Restore original state
             if original_version_mod is not None:
