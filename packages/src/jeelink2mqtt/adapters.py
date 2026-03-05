@@ -16,8 +16,8 @@ from jeelink2mqtt.models import SensorReading
 
 logger = logging.getLogger(__name__)
 
-_FRAME_RE = re.compile(r"id=(\d+)\s+t=([\d.]+)\s+h=(\d+)\s+nbat=(\d+)")
-"""Regex matching pylacrosse's string sensor format."""
+_FRAME_RE = re.compile(r"id=(\d+)\s+t=(-?[\d.]+)\s+h=(\d+)\s+nbat=(\d+)")
+"""Regex matching pylacrosse's string sensor format (supports negative temps)."""
 
 
 class PyLaCrosseAdapter:

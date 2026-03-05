@@ -12,6 +12,17 @@ Supported commands::
 
 When the handler returns a ``dict``, cosalette auto-publishes it
 as the device state → ``jeelink2mqtt/mapping/state``.
+
+.. note::
+
+   The receiver also publishes a retained mapping **snapshot** to
+   ``mapping/state``.  Command responses follow a different schema
+   (``{status, event}``); the receiver's next snapshot will overwrite
+   the command response, restoring the canonical schema.
+
+Events are NOT drained by the command handler — the receiver loop
+is the single owner of ``drain_events()``, ensuring ``mapping/event``
+publication and filter cleanup happen in one place.
 """
 
 from __future__ import annotations
@@ -79,10 +90,11 @@ def register_commands(app: cosalette.App) -> None:
 
         result = handler(state, data)
 
-        # Persist immediately after mutation and drain events so the
-        # receiver loop doesn't re-publish them as duplicates.
+        # Persist immediately after mutation so the mapping survives a
+        # crash.  Events are NOT drained here — the receiver loop is
+        # the single owner of drain_events(), ensuring mapping/event
+        # publication and filter cleanup happen in one place.
         if command in {"assign", "reset", "reset_all"}:
-            state.registry.drain_events()  # Already captured in result
             store["registry"] = state.registry.to_dict()
 
         return result

@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import cosalette
@@ -73,6 +74,7 @@ def register_receiver(app: cosalette.App) -> None:
         # Track last calibrated readings for heartbeat re-publish
         last_readings: dict[str, SensorReading] = {}
         last_publish_time: dict[str, datetime] = {}
+        last_persist_time = datetime.now(UTC)
 
         try:
             while not ctx.shutdown_requested:
@@ -120,9 +122,16 @@ def register_receiver(app: cosalette.App) -> None:
 
                 if events:
                     await _publish_mapping_state(ctx, state)
+                    # Persist immediately on mapping changes
+                    store["registry"] = state.registry.to_dict()
+                    last_persist_time = datetime.now(UTC)
 
-                # 5. Persist registry to device store
-                store["registry"] = state.registry.to_dict()
+                # 5. Periodic persistence for last_seen metadata (ADR-004)
+                # Avoids writing on every frame while still surviving restarts.
+                now = datetime.now(UTC)
+                if (now - last_persist_time).total_seconds() >= 60:
+                    store["registry"] = state.registry.to_dict()
+                    last_persist_time = now
 
         finally:
             # Publish all configured sensors as offline
@@ -149,13 +158,7 @@ def _apply_pipeline(
 ) -> SensorReading:
     """Filter → calibrate a raw reading, returning a new SensorReading."""
     temp, humidity = state.filter_bank.filter(reading)
-    filtered = SensorReading(
-        sensor_id=reading.sensor_id,
-        temperature=temp,
-        humidity=int(humidity),
-        low_battery=reading.low_battery,
-        timestamp=reading.timestamp,
-    )
+    filtered = replace(reading, temperature=temp, humidity=int(humidity))
     return apply_calibration(filtered, config)
 
 

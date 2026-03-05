@@ -30,8 +30,8 @@ seeing and follow the fix.
     **Checklist:**
 
     1. **Check the raw channel** — subscribe to `jeelink2mqtt/raw/state`.
-       If frames appear here but not on named topics, the issue is in mapping
-       the issue is in sensor mapping — see the auto-adopt section below.
+       If frames appear here but not on named topics, the issue is in sensor
+       mapping — see the auto-adopt section below.
 
     2. **Verify serial port** — confirm the device exists and matches config:
 

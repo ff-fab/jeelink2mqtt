@@ -1,17 +1,80 @@
-"""Unit tests for jeelink2mqtt.adapters — FakeJeeLinkAdapter only.
+"""Unit tests for jeelink2mqtt.adapters.
 
 Test Techniques Used:
 - State Transition Testing: Adapter lifecycle (open → callback → inject → close)
 - Error Guessing: inject without callback raises RuntimeError
 - Specification-based Testing: No-op methods don't crash
+- Boundary Value Analysis: Frame regex edge cases (negative temps, zero)
 """
 
 from __future__ import annotations
 
 import pytest
 
-from jeelink2mqtt.adapters import FakeJeeLinkAdapter
+from jeelink2mqtt.adapters import _FRAME_RE, FakeJeeLinkAdapter
 from jeelink2mqtt.models import SensorReading
+
+# ======================================================================
+# Frame regex (_FRAME_RE)
+# ======================================================================
+
+
+@pytest.mark.unit
+class TestFrameRegex:
+    """Boundary Value Analysis for the pylacrosse frame regex."""
+
+    def test_positive_temperature(self) -> None:
+        """Standard positive temperature parses correctly.
+
+        Technique: Specification-based — happy path.
+        """
+        match = _FRAME_RE.search("id=42 t=21.5 h=55 nbat=0")
+        assert match is not None
+        assert match.group(1) == "42"
+        assert match.group(2) == "21.5"
+        assert match.group(3) == "55"
+        assert match.group(4) == "0"
+
+    def test_negative_temperature(self) -> None:
+        """Sub-zero temperature (winter outdoor) parses correctly.
+
+        Technique: Boundary Value Analysis — sign change boundary.
+        Regression: Codex review caught that the original regex
+        ``[\\d.]+`` silently dropped negative readings.
+        """
+        match = _FRAME_RE.search("id=17 t=-2.1 h=80 nbat=0")
+        assert match is not None
+        assert match.group(2) == "-2.1"
+
+    def test_zero_temperature(self) -> None:
+        """Exactly 0.0 °C parses correctly.
+
+        Technique: Boundary Value Analysis — zero boundary.
+        """
+        match = _FRAME_RE.search("id=5 t=0.0 h=90 nbat=1")
+        assert match is not None
+        assert match.group(2) == "0.0"
+
+    def test_large_negative_temperature(self) -> None:
+        """Extreme cold (-40 °C, LaCrosse sensor lower bound) parses.
+
+        Technique: Boundary Value Analysis — lower bound.
+        """
+        match = _FRAME_RE.search("id=99 t=-40.0 h=100 nbat=0")
+        assert match is not None
+        assert match.group(2) == "-40.0"
+
+    def test_malformed_frame_returns_none(self) -> None:
+        """Garbage input yields no match.
+
+        Technique: Error Guessing — unparsable input.
+        """
+        assert _FRAME_RE.search("garbage data") is None
+
+
+# ======================================================================
+# FakeJeeLinkAdapter lifecycle
+# ======================================================================
 
 
 @pytest.mark.unit

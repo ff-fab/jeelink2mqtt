@@ -38,8 +38,8 @@ battery swaps, plus a raw diagnostic channel for debugging and manual disambigua
 ## Considered Options
 
 1. **App-side auto-mapping only** — the app manages the full ID→name mapping
-   internally. Unknown IDs are auto-assigned to the sensor that has been stale the
-   longest (oldest-stale heuristic). Publishes per-sensor named topics.
+   internally. Unknown IDs are auto-assigned when exactly one configured sensor
+   is stale (single-stale condition). Publishes per-sensor named topics.
 
 2. **Pass-through with metadata** — publish raw sensor IDs to MQTT. Let downstream
    consumers handle the name mapping via their own automation rules. App adds
